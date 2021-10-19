@@ -1,109 +1,173 @@
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.Iterator;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 
-public class SmartArray {
-    private final static int INITIAL_CAPACITY = 8;
+public class SmartArray<E> implements Iterable<E> {
+    private static final Integer INITIAL_CAPACITY = 8;
+    private E[] elements;
+    private int nextFreeIndex;
+    private int iterableIndex;
 
-    private int[] elements;
-    private int size;
-
+    @SuppressWarnings("unchecked")
     public SmartArray() {
-        this.elements = new int[INITIAL_CAPACITY];
-        this.size = 0;
+        this.elements = (E[]) new Object[INITIAL_CAPACITY];
+        this.nextFreeIndex = 0;
+        this.iterableIndex = 0;
     }
 
-    public void add(int element) {
-        if (this.size == elements.length) {
-            this.elements = grow();
-        }
-
-        this.elements[this.size] = element;
-        this.size++;
+    public void add(E element) {
+        assertGrowIsNeeded();
+        this.elements[nextFreeIndex] = element;
+        this.nextFreeIndex += 1;
     }
 
-    private int[] grow() {
-        int[] newElements = new int[elements.length * 2];
-
+    @SuppressWarnings("unchecked")
+    private E[] grow() {
+        Object[] newElements = new Object[this.elements.length * 2];
         System.arraycopy(this.elements, 0, newElements, 0, this.elements.length);
-
-        return newElements;
+        return (E[]) newElements;
     }
 
-    public int get(int index) {
-        ensureIndex(index);
+    public E get(int index) {
+        validateIndex(index);
         return this.elements[index];
     }
 
-    public int size() {
-        return this.size;
-    }
+    public E remove(int index) {
+        validateIndex(index);
+        E removedElement = this.elements[index];
 
-    public int remove(int index) {
-        ensureIndex(index);
+        if (this.nextFreeIndex - 1 - index >= 0)
+            System.arraycopy(this.elements, index + 1, this.elements, index, this.nextFreeIndex - 1 - index);
+        this.elements[this.nextFreeIndex - 1] = null;
+        this.nextFreeIndex--;
 
-        int removed = this.elements[index];
-
-        for (int i = index; i < this.size - 1; i++) {
-            this.elements[i] = this.elements[i + 1];
-        }
-
-        this.elements[this.size - 1] = 0;
-        this.size--;
-
-        if (this.size <= this.elements.length / 4) {
+        if (this.nextFreeIndex <= this.elements.length / 4) {
             this.elements = shrink();
         }
 
-        return removed;
+        return removedElement;
     }
 
-    private int[] shrink() {
-        int reduceFactor = 2;
-
-        if (this.elements.length / reduceFactor >= INITIAL_CAPACITY) {
-            int[] newElements = new int[this.elements.length / reduceFactor];
-
-            for (int i = 0; i < this.size; i++) {
-                newElements[i] = this.elements[i];
-            }
-
-            return newElements;
+    @SuppressWarnings("unchecked")
+    private E[] shrink() {
+        if (this.elements.length / 2 >= INITIAL_CAPACITY) {
+            Object[] newElements = new Object[this.elements.length / 2];
+            System.arraycopy(this.elements, 0, newElements, 0, this.nextFreeIndex);
+            return (E[]) newElements;
         }
         return this.elements;
     }
 
-    private void ensureIndex(int index) {
-        if (index >= size || index < 0) {
-            throw new IndexOutOfBoundsException("Index " + index + " out of bounds for size " + this.size);
-        }
-    }
-
-    public boolean contains(int element) {
-        for (int i = 0; i < this.size; i++) {
-            if (element == elements[i]) {
-                return true;
+    public boolean contains(E element) {
+        boolean isFound = false;
+        while (this.iterator().hasNext()) {
+            if (this.iterator().next() == element) {
+                isFound = true;
+                break;
             }
         }
-
-        return false;
+        this.ZeroIterableIndex();
+        return isFound;
     }
 
-    public void add(int index, int element) {
-        ensureIndex(index);
+    public void add(int firstIndex, E element) {
+        validateIndex(firstIndex);
+        assertGrowIsNeeded();
 
-        int lastElement = this.elements[this.size - 1];
-
-        for (int i = this.size - 1; i > index; i--) {
-            this.elements[i] = this.elements[i - 1];
-        }
-
-        this.elements[index] = element;
-
-        add(lastElement);
+        if (this.nextFreeIndex - firstIndex >= 0)
+            System.arraycopy(this.elements, firstIndex, this.elements, firstIndex + 1, this.nextFreeIndex - firstIndex);
+        this.elements[firstIndex] = element;
+        this.nextFreeIndex += 1;
     }
 
-    public void forEach(Consumer<Integer> consumer) {
-        for (int i = 0; i < this.size; i++) {
-            consumer.accept(this.elements[i]);
+    public void forEach(Consumer<? super E> consumer) {
+        while (this.iterator().hasNext()) {
+            consumer.accept(this.iterator().next());
         }
+        this.ZeroIterableIndex();
+    }
+
+    public void printAll() {
+        while (this.iterator().hasNext()) {
+            System.out.println(this.iterator().next());
+        }
+        this.ZeroIterableIndex();
+    }
+
+    public void filter(Predicate<E> predicate) {
+        for (int i = 0; i < this.nextFreeIndex; i++) {
+            if (!predicate.test(this.elements[i])) {
+                this.remove(i);
+                i--;
+            }
+        }
+        this.ZeroIterableIndex();
+    }
+
+    @SuppressWarnings("unchecked")
+    public void sort(Comparator<E> comparator) {
+        E[] tempArr = (E[]) new Object[this.nextFreeIndex];
+        System.arraycopy(this.elements, 0, tempArr, 0, tempArr.length);
+        tempArr = (E[]) Arrays.stream(tempArr).sorted(comparator).toArray(Object[]::new);
+        System.arraycopy(tempArr, 0, this.elements, 0, tempArr.length);
+    }
+
+    public void swap(int fIndex, int sIndex) {
+        validateIndex(fIndex);
+        validateIndex(sIndex);
+        E fElement = this.elements[fIndex];
+        E sElement = this.elements[sIndex];
+        this.elements[fIndex] = sElement;
+        this.elements[sIndex] = fElement;
+    }
+
+    public int length() {
+        return this.nextFreeIndex - 1;
+    }
+
+    private void validateIndex(int index) {
+        if (index >= this.nextFreeIndex || index < 0) {
+            throw new IndexOutOfBoundsException(
+                    String.format("Index %d out of bounds for length %d",
+                            index, this.nextFreeIndex));
+        }
+    }
+
+    private void assertGrowIsNeeded() {
+        if (this.nextFreeIndex >= this.elements.length) {
+            this.elements = grow();
+        }
+    }
+
+    private void ZeroIterableIndex() {
+        this.iterableIndex = 0;
+    }
+
+    @Override
+    public Iterator<E> iterator() {
+        return new Iterator<>() {
+            @Override
+            public boolean hasNext() {
+                return iterableIndex <= length();
+            }
+
+            @Override
+            public E next() {
+                return elements[iterableIndex++];
+            }
+        };
+    }
+
+    @Override
+    public String toString() {
+        StringBuilder result = new StringBuilder();
+        while (this.iterator().hasNext()) {
+            result.append(this.iterator().next()).append("\s");
+        }
+        this.ZeroIterableIndex();
+        return result.toString().trim();
     }
 }
